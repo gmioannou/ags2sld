@@ -22,6 +22,10 @@ class Service(object):
 
     @property
     def descriptor(self):
+        # TODO change the format to json
+        # If you want the JSON object to be more readable, you can use pjson.
+        # You should not include this parameter in your production applications as it will affect performance.
+        # Use the parameter for debugging purposes only.
         params = {'f': 'pjson'}
         response = requests.get(self.url, params=params)
         return json.loads(response.text)
@@ -480,23 +484,25 @@ class Layer(object):
 
         print("  {}".format(os.path.basename(svg_file)))
 
-    def dump_sld_file(self):
+    def dump_sld_file(self, sld_path=None):
         sld_name = self.descriptor['name'].replace(' ', '_').replace(
             '/', '_').replace(':', '_')
-        sld_file = "{}.{}".format(sld_name, "sld")
-        sld_file = os.path.join(settings.MEDIA_ROOT, "sldfiles", sld_file)
+        file_name = "{}.{}".format(sld_name, "sld")
+        if not sld_path:
+            sld_path = os.path.join(settings.MEDIA_ROOT, "sldfiles", file_name)
 
         self.sld_doc.normalize()
 
-        with open(sld_file, 'w') as the_file:
+        with open(sld_path, 'w') as the_file:
             the_file.write(
                 tostring(
                     self.sld_doc._node,
                     pretty_print=True,
                     encoding="UTF-8",
                     xml_declaration=True))
-
-        print("  {}".format(os.path.basename(sld_file)))
+        # TODO: use logger instead of print function
+        print("  {}".format(os.path.basename(sld_path)))
+        return sld_path
 
     # Get sld style
     def parse(self):
