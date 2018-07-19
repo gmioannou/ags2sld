@@ -1,17 +1,16 @@
-import React from 'react'
-import { render } from 'react-dom'
-import Navbar from './Navbar'
-import MainPanel from './MainPanel'
+import React, { Component } from "react";
+import Main from "./Components/Main";
+import NavBar from "./components/Navbar";
 
-export default class Ags2sld extends React.Component {
-
-    render() {
-        return (
-            <div>
-                <Navbar/>
-                <MainPanel/>
-            </div>
-        )
-    }
+class App extends Component {
+  render() {
+    return (
+      <div>
+        <NavBar />
+        <Main className="container" />
+      </div>
+    );
+  }
 }
-render(<Ags2sld />, document.getElementById("app"))
+
+export default App;

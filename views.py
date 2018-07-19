@@ -2,7 +2,40 @@
 from __future__ import unicode_literals
 
 from django.shortcuts import render
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from handlers import Service, Layer
+import json
+
 
 def index(request):
     return render(request, 'ags2sld/index.html', {})
+
+
+# @csrf_exempt
+def get_sld(request):
+    if request.method == 'POST':
+        data = json.loads(request.body)
+        mapUrl = data.get('mapUrl')
+
+        service = Service(mapUrl)
+
+        for lay in service.layers[0:1]:
+            print("\n{} {}".format(lay['id'], lay['name']))
+
+            layer = Layer(service.url, lay['id'])
+            layer.parse()
+            layer.dump_sld_file()
+
+    return JsonResponse({"message": "Done!"})
+
+
+def get_map(request):
+    if request.method == "GET":
+        print "GET map request"
+
+    return JsonResponse({"message": "get map"})
+
+
+def get_layers(request):
+    return HttpResponse("get layers")

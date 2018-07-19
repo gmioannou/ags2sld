@@ -1,13 +1,15 @@
+import base64
+import json
 import os
 import urllib2
-import json
-import base64
-from django.conf import settings
-import sld
-from lxml.etree import tostring
-import requests
 from urlparse import urljoin
+
+import requests
 from lxml import etree
+from lxml.etree import tostring
+
+import sld
+from django.conf import settings
 
 
 class Service(object):
@@ -27,11 +29,7 @@ class Service(object):
 
     @property
     def descriptor(self):
-        # TODO change the format to json
-        # If you want the JSON object to be more readable, you can use pjson.
-        # You should not include this parameter in your production applications as it will affect performance.
-        # Use the parameter for debugging purposes only.
-        params = {'f': 'pjson'}
+        params = {'f': 'json'}
         response = requests.get(self.url, params=params)
         return json.loads(response.text)
 
@@ -481,8 +479,9 @@ class Layer(object):
     def dump_sld_file(self, sld_path=None):
         sld_name = self.descriptor['name'].replace(' ', '_').replace(
             '/', '_').replace(':', '_')
-        file_name = "{}.{}".format(sld_name, "sld")
-        sld_path = os.path.join(settings.MEDIA_ROOT, "sld", file_name)
+
+        sld_file = "{}.{}".format(sld_name, "sld")
+        sld_file = os.path.join(settings.MEDIA_ROOT, "sld", sld_file)
 
         if not sld_path:
             sld_path = os.path.join(settings.MEDIA_ROOT, "sld", file_name)
