@@ -22,6 +22,10 @@ class Service(object):
 
     @property
     def descriptor(self):
+        # TODO change the format to json
+        # If you want the JSON object to be more readable, you can use pjson.
+        # You should not include this parameter in your production applications as it will affect performance.
+        # Use the parameter for debugging purposes only.
         params = {'f': 'pjson'}
         response = requests.get(self.url, params=params)
         return json.loads(response.text)
