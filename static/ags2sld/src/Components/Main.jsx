@@ -7,7 +7,8 @@ class Main extends Component {
     super(props);
     this.state = {
       mapUrl:
-        "https://rest.palmettoeoc.net/arcgis/rest/services/SC_Base_Data/FireStations/MapServer/"
+        "https://rest.palmettoeoc.net/arcgis/rest/services/SC_Base_Data/FireStations/MapServer/",
+      dumpFolder: "C:\\Temp"
     };
   }
 
@@ -15,7 +16,11 @@ class Main extends Component {
     event.preventDefault();
     console.log({ mapUrl: this.state.mapUrl });
 
-    const data = JSON.stringify({ mapUrl: this.state.mapUrl });
+    const data = JSON.stringify({
+      mapUrl: this.state.mapUrl,
+      dumpFolder: this.state.dumpFolder
+    });
+
     const url = "http://localhost:8000/ags2sld/getsld";
 
     let res = doPost(url, data).then(result => {
@@ -54,7 +59,7 @@ class Main extends Component {
 
             <button
               type="submit"
-              className="btn btn-primary m-2"
+              className="btn btn-primary"
               onClick={event => {
                 this.handleClick(event);
               }}

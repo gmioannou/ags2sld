@@ -27,8 +27,7 @@ class Command(BaseCommand):
         service = Service(mapurl)
 
         for lay in service.layers:
-            print("\n{} {}".format(lay['id'], lay['name']))
+            print("\n{} {}".format(lay.get('id'), lay.get('name')))
 
-            layer = Layer(service.url, lay['id'])
-            layer.parse()
+            layer = Layer(service.url, lay.get('id'))
             layer.dump_sld_file()
