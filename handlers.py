@@ -284,7 +284,7 @@ class Layer(object):
     def _render_esriGeometryMultipoint(self, rule, symbol):
         print "_render_esriGeometryMultipoint - TODO"
 
-    def _convert_esriPMS(self, rule, symbol, img_type='svg'):
+    def _convert_esriPMS(self, rule, symbol, img_type='img'):
         print "_convert_esriPMS"
 
         symbolizer = rule.create_symbolizer('Point')
@@ -295,11 +295,12 @@ class Layer(object):
         symbol_contentType = symbol.get('contentType')
         base64data = symbol.get('imageData')
 
-        if img_type == 'img': 
+        if img_type == 'img':
             img_ext = symbol_contentType.split('/')[1]
             img_name = rule.Title.replace(' ', '_').replace('/', '_')
             img_file = "{}.{}".format(img_name, img_ext)
-            img_file_path = os.path.join(settings.MEDIA_ROOT, "sld_icons", img_file)
+            img_file_path = os.path.join(settings.MEDIA_ROOT, "sld_icons",
+                                         img_file)
             self.dump_image_file(img_file_path, base64data)
 
             onlineResource = externalGraphic.create_online_resource(img_file)
@@ -308,11 +309,13 @@ class Layer(object):
             svg_ext = "svg"
             svg_name = rule.Title.replace(' ', '_').replace('/', '_')
             svg_file = "{}.{}".format(svg_name, svg_ext)
-            svg_file_path = os.path.join(settings.MEDIA_ROOT, "sld_icons", svg_file)
+            svg_file_path = os.path.join(settings.MEDIA_ROOT, "sld_icons",
+                                         svg_file)
             self.dump_svg_file(svg_file_path, base64data)
 
             graphic.Size = symbol_size
-            onlineResource = externalGraphic.create_online_resource(svg_file_path)
+            onlineResource = externalGraphic.create_online_resource(
+                svg_file_path)
             externalGraphic.Format = "image/svg+xml"
 
     def _convert_esriSFS(self, rule, symbol):
@@ -478,8 +481,9 @@ class Layer(object):
     def dump_sld_file(self, sld_path=None):
         sld_name = self.descriptor['name'].replace(' ', '_').replace(
             '/', '_').replace(':', '_')
-            sld_path = os.path.join(settings.MEDIA_ROOT, "sld", file_name)
         file_name = "{}.{}".format(sld_name, "sld")
+        sld_path = os.path.join(settings.MEDIA_ROOT, "sld", file_name)
+
         if not sld_path:
             sld_path = os.path.join(settings.MEDIA_ROOT, "sld", file_name)
 
