@@ -33,10 +33,10 @@ def get_sld(request):
 
 def get_map(request):
     if request.method == "GET":
-        print "GET map request"
+        mapUrl = request.GET.get('mapUrl', None)
+        service = Service(mapUrl)
+        # layers = json.loads(service.layers)
+        for lay in service.layers:
+            print("\n{} {}".format(lay['id'], lay['name']))
 
-    return JsonResponse({"message": "get map"})
-
-
-def get_layers(request):
-    return HttpResponse("get layers")
+    return JsonResponse({"message": "Done!"})

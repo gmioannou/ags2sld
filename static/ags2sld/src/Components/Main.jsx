@@ -7,8 +7,7 @@ class Main extends Component {
     super(props);
     this.state = {
       mapUrl:
-        "https://rest.palmettoeoc.net/arcgis/rest/services/SC_Base_Data/FireStations/MapServer/",
-      dumpFolder: "C:\\Temp"
+        "https://rest.palmettoeoc.net/arcgis/rest/services/SC_Base_Data/FireStations/MapServer/"
     };
   }
 
@@ -17,8 +16,7 @@ class Main extends Component {
     console.log({ mapUrl: this.state.mapUrl });
 
     const data = JSON.stringify({
-      mapUrl: this.state.mapUrl,
-      dumpFolder: this.state.dumpFolder
+      mapUrl: this.state.mapUrl
     });
 
     const url = "http://localhost:8000/ags2sld/getsld";
@@ -31,8 +29,8 @@ class Main extends Component {
   handleClick_GetMap(event) {
     console.log({ mapUrl: this.state.mapUrl });
 
-    let url = "http://localhost:8000/ags2sld/getmap";
-    console.log(url);
+    let url =
+      "http://localhost:8000/ags2sld/getmap/?" + "mapUrl=" + this.state.mapUrl;
 
     let res = doGet(url).then(result => {
       console.log(result);

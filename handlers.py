@@ -2,7 +2,7 @@ import base64
 import json
 import os
 import urllib2
-from urlparse import urljoin
+# from urlparse import urljoin
 
 import requests
 from lxml import etree
@@ -54,9 +54,12 @@ class Layer(object):
             'esriSLSSolid': self._convert_esriSLSSolid,
         }
 
+    def urljoin(self, *args):
+        return "/".join(map(lambda x: str(x).rstrip('/'), args))
+
     @property
     def _url(self):
-        return urljoin(self.service_url, self.layer_id)
+        return self.urljoin(self.service_url, self.layer_id)
 
     @property
     def dump_folder(self):
@@ -65,7 +68,7 @@ class Layer(object):
 
         if not os.path.exists(self._dump_folder):
             os.makedirs(self._dump_folder)
-            
+
         return self._dump_folder
 
     @property
@@ -413,7 +416,7 @@ class Layer(object):
             halo_fill.create_cssparameter('fill',
                                           self._convert_color(halo_fill_color))
 
-        labelPlacement = symbolizer.create_label()
+        # labelPlacement = symbolizer.create_label()
 
     # esriStyles
     def _convert_esriSMSCircle(self, rule, symbolizer, symbol):
@@ -479,7 +482,7 @@ class Layer(object):
 
         self.parse()
 
-        sld_name = self.descriptor['name'].replace(' ', '_').replace(
+        sld_name = self.descriptor.get('name').replace(' ', '_').replace(
             '/', '_').replace(':', '_')
 
         sld_file = "{}.{}".format(sld_name, "sld")

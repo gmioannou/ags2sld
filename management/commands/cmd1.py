@@ -16,7 +16,7 @@ class Command(BaseCommand):
         # mapurl = "https://rest.palmettoeoc.net/arcgis/rest/services/SC_Base_Data/Basemap/MapServer/"        # 4 city limits
         # mapurl = "https://rest.palmettoeoc.net/arcgis/rest/services/SCEMD_Data/MitigationPlans/MapServer/"    # 0,2
         # mapurl = "https://rest.palmettoeoc.net/arcgis/rest/services/SC_Base_Data/PublicWorks/MapServer/"    # 7,8
-        mapurl = "https://rest.palmettoeoc.net/arcgis/rest/services/SC_Base_Data/FireStations/MapServer/"  # 0,3
+        mapurl = "https://rest.palmettoeoc.net/arcgis/rest/services/SC_Base_Data/FireStations/MapServer"  # 0,3
         # mapurl = "https://rest.palmettoeoc.net/arcgis/rest/services/SC_Base_Data/Regions/MapServer/"        # 0,2
         # mapurl = "http://sampleserver1.arcgisonline.com/ArcGIS/rest/services/Demographics/ESRI_Census_USA/MapServer/"
         # mapurl = "http://sampleserver1.arcgisonline.com/ArcGIS/rest/services/PublicSafety/PublicSafetyFeedSample/MapServer/"
