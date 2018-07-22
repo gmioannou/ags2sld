@@ -1,32 +1,23 @@
-import os
-import urllib2
-import json
 import base64
-from django.conf import settings
-import sld
-from lxml.etree import tostring
-import requests
+import json
+import os
 from urlparse import urljoin
-from lxml import etree
+
+import requests
+from django.conf import settings
+from django.template.defaultfilters import slugify
+from lxml.etree import tostring
+
+import sld
 
 
 class Service(object):
     def __init__(self, url):
         self.url = url
-        self.init_paths()
-
-    def init_paths(self):
-        path = os.path.join(settings.MEDIA_ROOT, "sldfiles", "img")
-        if not os.path.exists(path):
-            os.makedirs(path)
 
     @property
     def descriptor(self):
-        # TODO change the format to json
-        # If you want the JSON object to be more readable, you can use pjson.
-        # You should not include this parameter in your production applications as it will affect performance.
-        # Use the parameter for debugging purposes only.
-        params = {'f': 'pjson'}
+        params = {'f': 'json'}
         response = requests.get(self.url, params=params)
         return json.loads(response.text)
 
@@ -36,10 +27,11 @@ class Service(object):
 
 
 class Layer(object):
-    def __init__(self, service_url, layer_id):
+    def __init__(self, service_url, layer_id, dump_folder=None):
         self.service_url = service_url
         self.layer_id = str(layer_id)
         self.sld_doc = sld.StyledLayerDescriptor()
+        self._dump_folder = dump_folder
 
         self._renderers = {
             'esriGeometryPoint': self._render_esriGeometryPoint,
@@ -60,9 +52,23 @@ class Layer(object):
             'esriSFSSolid': self._convert_esriSFSSolid,
             'esriSLSSolid': self._convert_esriSLSSolid,
         }
+
+    def urljoin(self, *args):
+        return "/".join(map(lambda x: str(x).rstrip('/'), args))
+
     @property
     def _url(self):
-        return urljoin(self.service_url, self.layer_id)
+        return self.urljoin(self.service_url, self.layer_id)
+
+    @property
+    def dump_folder(self):
+        if not self._dump_folder:
+            self._dump_folder = os.path.join(settings.MEDIA_ROOT, "sld")
+
+        if not os.path.exists(self._dump_folder):
+            os.makedirs(self._dump_folder)
+
+        return self._dump_folder
 
     @property
     def descriptor(self):
@@ -72,7 +78,7 @@ class Layer(object):
 
     @property
     def name(self):
-        return self.descriptor.get('name')
+        return slugify(self.descriptor.get('name')).replace("-", "-")
 
     @property
     def drawingInfo(self):
@@ -82,11 +88,13 @@ class Layer(object):
         return self._renderers.get(geometryType)
 
     def _determine_type_converter(self, symbol_type):
-        return self._type_converters.get(symbol_type, self._convert_esriTypeDefault)
+        return self._type_converters.get(symbol_type,
+                                         self._convert_esriTypeDefault)
 
     def _determine_style_converter(self, symbol_style):
-        return self._style_converters.get(symbol_style, self._convert_esriStyleDefault)
-        
+        return self._style_converters.get(symbol_style,
+                                          self._convert_esriStyleDefault)
+
     def _parse_drawingInfo(self):
         namedLayer = self.sld_doc.create_namedlayer(self.name)
         userStyle = namedLayer.create_userstyle()
@@ -104,7 +112,8 @@ class Layer(object):
         labelingInfo = self.descriptor.get('drawingInfo').get('labelingInfo')
         for labelRule in labelingInfo:
             labelPlacement = labelRule.get('labelPlacement')
-            labelExpression = labelRule.get('labelExpression').replace('[', '').replace(']', '')
+            labelExpression = labelRule.get('labelExpression').replace(
+                '[', '').replace(']', '')
             symbol = labelRule.get('symbol')
             symbolType = symbol.get('type')
 
@@ -119,8 +128,9 @@ class Layer(object):
         # max_scale = str(self.descriptor.get('maxScale'))
 
         if self.drawingInfo.get('renderer').get('type') == "simple":
-            rule_label = self.descriptor.get('name')
-            rule = featureTypeStyle.create_rule(rule_label, sld.PolygonSymbolizer)
+            rule_label = self.name
+            rule = featureTypeStyle.create_rule(rule_label,
+                                                sld.PolygonSymbolizer)
             del rule.PolygonSymbolizer
 
             symbol = self.drawingInfo.get('renderer').get('symbol')
@@ -128,14 +138,15 @@ class Layer(object):
 
         if self.drawingInfo.get('renderer').get('type') == "uniqueValue":
             field1 = self.drawingInfo.get('renderer').get('field1')
-            uniqueValueInfos = self.drawingInfo.get('renderer').get('uniqueValueInfos')
+            uniqueValueInfos = self.drawingInfo.get('renderer').get(
+                'uniqueValueInfos')
 
             for uniqueValue in uniqueValueInfos:
                 label = uniqueValue.get('label')
                 value = uniqueValue.get('value')
 
-                rule = featureTypeStyle.create_rule(
-                    label, sld.PolygonSymbolizer)
+                rule = featureTypeStyle.create_rule(label,
+                                                    sld.PolygonSymbolizer)
                 del rule.PolygonSymbolizer
 
                 rule.create_filter(field1, '==', value)
@@ -168,7 +179,7 @@ class Layer(object):
         # max_scale = str(self.descriptor.get('maxScale'))
 
         if self.drawingInfo['renderer']['type'] == "simple":
-            rule_label = self.descriptor.get('name')
+            rule_label = self.name
             rule = featureTypeStyle.create_rule(rule_label, sld.LineSymbolizer)
             del rule.LineSymbolizer
 
@@ -184,8 +195,7 @@ class Layer(object):
 
         if self.drawingInfo['renderer']['type'] == "uniqueValue":
             field1 = self.drawingInfo['renderer']['field1']
-            uniqueValueInfos = self.drawingInfo['renderer'][
-                'uniqueValueInfos']
+            uniqueValueInfos = self.drawingInfo['renderer']['uniqueValueInfos']
 
             for uniqueValue in uniqueValueInfos:
                 label = uniqueValue['label']
@@ -203,9 +213,10 @@ class Layer(object):
         renderer_type = self.drawingInfo.get('renderer').get('type')
 
         if renderer_type == "simple":
-            rule_label = self.descriptor.get('name')
+            rule_label = self.name
 
-            rule = featureTypeStyle.create_rule(rule_label, sld.PointSymbolizer)
+            rule = featureTypeStyle.create_rule(rule_label,
+                                                sld.PointSymbolizer)
 
             del rule.PointSymbolizer
 
@@ -273,59 +284,38 @@ class Layer(object):
     def _render_esriGeometryMultipoint(self, rule, symbol):
         print "_render_esriGeometryMultipoint - TODO"
 
-
-    def _convert_esriPMS(self, rule, symbol):
+    def _convert_esriPMS(self, rule, symbol, img_type='img'):
         print "_convert_esriPMS"
 
-        # get the image and save on disk
+        symbolizer = rule.create_symbolizer('Point')
+        graphic = symbolizer.create_element("sld", 'Graphic')
+        externalGraphic = graphic.create_element("sld", "ExternalGraphic")
+
         symbol_size = str(symbol.get('width'))
         symbol_contentType = symbol.get('contentType')
         base64data = symbol.get('imageData')
 
-        # save imageData into image file on disk
-        img_ext = symbol_contentType.split('/')[1]
-        img_name = rule.Title.replace(' ', '_').replace('/', '_')
-        img_file = "{}.{}".format(img_name, img_ext)
-        img_file_path = os.path.join(settings.MEDIA_ROOT, "sldfiles/img", img_file)
-        self.dump_image_file(img_file_path, base64data)
+        if img_type == 'img':
+            img_ext = symbol_contentType.split('/')[1]
+            img_name = slugify(rule.Title).replace("-", "_")
+            img_file = "{}.{}".format(img_name, img_ext)
+            img_file_path = os.path.join(self.dump_folder, img_file)
 
-        # create the symbolizer
-        symbolizer = rule.create_symbolizer('Point')
-        graphic = symbolizer.create_element("sld", 'Graphic')
-        
-        externalGraphic = graphic.create_element("sld", "ExternalGraphic")
+            self.dump_image_file(img_file_path, base64data)
 
-        # img
-        # sub_img = etree.SubElement(
-        #     externalGraphic._node, '{%s}%s' % (sld.SLDNode._nsmap["sld"], "OnlineResource"), {
-        #         '{%s}type' % 'http://www.w3.org/1999/xlink': 'simple',
-        #         '{%s}href' % 'http://www.w3.org/1999/xlink': img_file
-        #     })
+            onlineResource = externalGraphic.create_online_resource(img_file)
+            externalGraphic.Format = "image/{}".format(img_ext)
+        else:
+            svg_ext = "svg"
+            svg_name = slugify(rule.Title).replace("-", "_")
+            svg_file = "{}.{}".format(svg_name, svg_ext)
+            svg_file_path = os.path.join(self.dump_folder, svg_file)
 
-        onlineResource = externalGraphic.create_online_resource(img_file)
-        externalGraphic.Format = "image/png"
+            self.dump_svg_file(svg_file_path, base64data)
 
-        # # svg
-        # img_ext = "svg"
-        # svg_file = "{}.{}".format(img_name, img_ext)
-        # svg_file_path = os.path.join(settings.MEDIA_ROOT, "sldfiles/svg", svg_file)
-        # self.dump_svg_file(svg_file_path, base64data)
-
-        # graphic.Size = symbol_size
-        # sub_svg = etree.SubElement(
-        #     externalGraphic._node, '{%s}%s' % (sld.SLDNode._nsmap["sld"], "OnlineResource"), {
-        #         '{%s}type' % 'http://www.w3.org/1999/xlink': 'simple',
-        #         '{%s}href' % 'http://www.w3.org/1999/xlink': svg_file
-        #     })
-
-        # externalGraphic.Format = "image/svg+xml"
-
-
-
-
-        # this is the initial approach
-        # onlineResource = externalGraphic.create_element('sld', "OnlineResource")
-
+            graphic.Size = symbol_size
+            onlineResource = externalGraphic.create_online_resource(svg_file)
+            externalGraphic.Format = "image/svg+xml"
 
     def _convert_esriSFS(self, rule, symbol):
         print "_convert_esriSFS"
@@ -345,10 +335,12 @@ class Layer(object):
             stroke = symbolizer.create_stroke()
             stroke_width = str(symbol.get('outline').get('width'))
 
-            stroke.create_cssparameter('stroke', self._convert_color(stroke_color))
+            stroke.create_cssparameter('stroke',
+                                       self._convert_color(stroke_color))
             stroke.create_cssparameter('stroke-width', stroke_width)
             stroke.create_cssparameter('stroke-linejoin', 'bevel')
-            stroke.create_cssparameter('stroke-opacity', str(stroke_color[3] / 255))
+            stroke.create_cssparameter('stroke-opacity',
+                                       str(stroke_color[3] / 255))
 
     def _convert_esriSLS(self, rule, symbol):
         print "_convert_esriSLS"
@@ -364,7 +356,8 @@ class Layer(object):
             stroke_width = str(symbol.get('outline').get('width'))
 
         if stroke_color:
-            stroke.create_cssparameter('stroke', self._convert_color(stroke_color))
+            stroke.create_cssparameter('stroke',
+                                       self._convert_color(stroke_color))
             stroke.create_cssparameter('stroke-width', stroke_width)
             stroke.create_cssparameter('stroke-linejoin', 'bevel')
 
@@ -419,10 +412,10 @@ class Layer(object):
             halo_fill = halo.create_fill()
             halo_fill_color = symbol.get('haloColor')
             halo_fill_opacity = str(halo_fill_color[3] / 255)
-            halo_fill.create_cssparameter(
-                'fill', self._convert_color(halo_fill_color))
+            halo_fill.create_cssparameter('fill',
+                                          self._convert_color(halo_fill_color))
 
-        labelPlacement = symbolizer.create_label()
+        # labelPlacement = symbolizer.create_label()
 
     # esriStyles
     def _convert_esriSMSCircle(self, rule, symbolizer, symbol):
@@ -476,24 +469,25 @@ class Layer(object):
         width="240px" height="240px" viewBox="0 0 240 240">"""
 
         endSvgTag = """</svg>"""
-                    #    '<image xlink:href="data:image/png;base64,b'IVBoR32=='" width="240" height="240" x="0" y="0" />'
-        base64String = '<image xlink:href="data:image/png;base64,{0}" width="240" height="240" x="0" y="0" />'.format(base64data.decode('utf-8'))
+        base64String = '<image xlink:href="data:image/png;base64,{0}" width="240" height="240" x="0" y="0" />'.format(
+            base64data.decode('utf-8'))
 
         with open(svg_file, "w") as fh:
             fh.write(startSvgTag + base64String + endSvgTag)
 
         print("  {}".format(os.path.basename(svg_file)))
 
-    def dump_sld_file(self, sld_path=None):
-        sld_name = self.descriptor['name'].replace(' ', '_').replace(
-            '/', '_').replace(':', '_')
-        file_name = "{}.{}".format(sld_name, "sld")
-        if not sld_path:
-            sld_path = os.path.join(settings.MEDIA_ROOT, "sldfiles", file_name)
+    def dump_sld_file(self):
+
+        self.parse()
+
+        sld_name = slugify(self.descriptor['name']).replace("-", "_")
+        sld_file = "{}.{}".format(sld_name, "sld")
+        sld_file_path = os.path.join(self.dump_folder, sld_file)
 
         self.sld_doc.normalize()
 
-        with open(sld_path, 'w') as the_file:
+        with open(sld_file_path, 'w') as the_file:
             the_file.write(
                 tostring(
                     self.sld_doc._node,
@@ -501,12 +495,12 @@ class Layer(object):
                     encoding="UTF-8",
                     xml_declaration=True))
         # TODO: use logger instead of print function
-        print("  {}".format(os.path.basename(sld_path)))
-        return sld_path
+        print("  {}".format(os.path.basename(sld_file_path)))
 
     # Get sld style
     def parse(self):
         if self.descriptor.get('type') == "Feature Layer":
             self._parse_drawingInfo()
         else:
+            # TODO: use logger instead of print function
             print("  {} not parsed...".format(self.descriptor.get('type')))
