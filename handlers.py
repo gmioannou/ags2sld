@@ -1,15 +1,14 @@
 import base64
 import json
 import os
-import urllib2
-# from urlparse import urljoin
+from urlparse import urljoin
 
 import requests
-from lxml import etree
+from django.conf import settings
+from django.template.defaultfilters import slugify
 from lxml.etree import tostring
 
 import sld
-from django.conf import settings
 
 
 class Service(object):
@@ -79,7 +78,7 @@ class Layer(object):
 
     @property
     def name(self):
-        return self.descriptor.get('name')
+        return slugify(self.descriptor.get('name')).replace("-", "-")
 
     @property
     def drawingInfo(self):
@@ -129,7 +128,7 @@ class Layer(object):
         # max_scale = str(self.descriptor.get('maxScale'))
 
         if self.drawingInfo.get('renderer').get('type') == "simple":
-            rule_label = self.descriptor.get('name')
+            rule_label = self.name
             rule = featureTypeStyle.create_rule(rule_label,
                                                 sld.PolygonSymbolizer)
             del rule.PolygonSymbolizer
@@ -180,7 +179,7 @@ class Layer(object):
         # max_scale = str(self.descriptor.get('maxScale'))
 
         if self.drawingInfo['renderer']['type'] == "simple":
-            rule_label = self.descriptor.get('name')
+            rule_label = self.name
             rule = featureTypeStyle.create_rule(rule_label, sld.LineSymbolizer)
             del rule.LineSymbolizer
 
@@ -214,7 +213,7 @@ class Layer(object):
         renderer_type = self.drawingInfo.get('renderer').get('type')
 
         if renderer_type == "simple":
-            rule_label = self.descriptor.get('name')
+            rule_label = self.name
 
             rule = featureTypeStyle.create_rule(rule_label,
                                                 sld.PointSymbolizer)
@@ -298,7 +297,7 @@ class Layer(object):
 
         if img_type == 'img':
             img_ext = symbol_contentType.split('/')[1]
-            img_name = rule.Title.replace(' ', '_').replace('/', '_')
+            img_name = slugify(rule.Title).replace("-", "_")
             img_file = "{}.{}".format(img_name, img_ext)
             img_file_path = os.path.join(self.dump_folder, img_file)
 
@@ -308,7 +307,7 @@ class Layer(object):
             externalGraphic.Format = "image/{}".format(img_ext)
         else:
             svg_ext = "svg"
-            svg_name = rule.Title.replace(' ', '_').replace('/', '_')
+            svg_name = slugify(rule.Title).replace("-", "_")
             svg_file = "{}.{}".format(svg_name, svg_ext)
             svg_file_path = os.path.join(self.dump_folder, svg_file)
 
@@ -482,9 +481,7 @@ class Layer(object):
 
         self.parse()
 
-        sld_name = self.descriptor.get('name').replace(' ', '_').replace(
-            '/', '_').replace(':', '_')
-
+        sld_name = slugify(self.descriptor['name']).replace("-", "_")
         sld_file = "{}.{}".format(sld_name, "sld")
         sld_file_path = os.path.join(self.dump_folder, sld_file)
 

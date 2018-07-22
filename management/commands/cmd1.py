@@ -1,7 +1,4 @@
 from django.core.management.base import BaseCommand
-import os
-from osgeo import ogr
-import json
 
 from ags2sld.handlers import Service, Layer
 
