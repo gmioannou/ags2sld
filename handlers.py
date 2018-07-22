@@ -1,8 +1,6 @@
 import base64
 import json
 import os
-from urlparse import urljoin
-
 import requests
 from django.conf import settings
 from django.template.defaultfilters import slugify
