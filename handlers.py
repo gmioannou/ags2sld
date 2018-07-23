@@ -295,39 +295,23 @@ class Layer(object):
         symbol_contentType = symbol.get('contentType')
         base64data = symbol.get('imageData')
         # TODO:Refactor the following section
+        sld_icon_format = None
+        icon_ext = None
+        icon_name = slugify(rule.Title).replace("-", "_")
         if img_type == 'img':
-            img_ext = symbol_contentType.split('/')[1]
-            img_name = slugify(rule.Title).replace("-", "_")
-            # NOTE:I added icons to a directory with the layer name 
-            # the structure would be 
-            # + dump_folder/ 
-            #    + file.sld 
-            #    + layer_name/ 
-            #       + icon.png/svg 
-            img_file = os.path.join(self.name, "{}.{}".format(
-                img_name, img_ext))
-            img_file_path = os.path.join(self.dump_folder, img_file)
-            self.dump_image_file(img_file_path, base64data)
-            onlineResource = externalGraphic.create_online_resource(img_file)
-            externalGraphic.Format = "image/{}".format(img_ext)
+            icon_ext = symbol_contentType.split('/')[1]
+            sld_icon_format = "image/{}".format(icon_ext)
         else:
-            svg_ext = "svg"
-            svg_name = slugify(rule.Title).replace("-", "_")
-            # NOTE:I added icons to a directory with the layer name 
-            # the structure would be 
-            # + dump_folder/ 
-            #    + file.sld 
-            #    + layer_name/ 
-            #       + icon.png/svg 
-            svg_file = os.path.join(self.name, "{}.{}".format(
-                svg_name, svg_ext))
-            svg_file_path = os.path.join(self.dump_folder, svg_file)
-
-            self.dump_svg_file(svg_file_path, base64data)
-
+            icon_ext = "svg"
+            sld_icon_format = "image/svg+xml"
             graphic.Size = symbol_size
-            onlineResource = externalGraphic.create_online_resource(svg_file)
-            externalGraphic.Format = "image/svg+xml"
+
+        icon_file_name = os.path.join(self.name, "{}.{}".format(
+            icon_name, icon_ext))
+        icon_file_path = os.path.join(self.dump_folder, icon_file_name)
+        self.dump_icon_file(icon_file_path, base64data)
+        onlineResource = externalGraphic.create_online_resource(icon_file_name)
+        externalGraphic.Format = sld_icon_format
 
     def _convert_esriSFS(self, rule, symbol):
         print "_convert_esriSFS"
@@ -465,41 +449,33 @@ class Layer(object):
         color_hex = '#{:02x}{:02x}{:02x}'.format(r, g, b)
         return color_hex
 
-    def dump_image_file(self, image_file, base64data):
-        if not os.path.exists(os.path.dirname(image_file)):
+    def dump_icon_file(self, icon_file, base64data):
+        if not os.path.exists(os.path.dirname(icon_file)):
             try:
-                os.makedirs(os.path.dirname(image_file))
+                os.makedirs(os.path.dirname(icon_file))
             except OSError as exc:  # Guard against race condition
                 if exc.errno != errno.EEXIST:
                     raise
-        with open(image_file, "wb") as fh:
-            fh.write(base64.b64decode(base64data.encode()))
+        filename, ext = os.path.splitext(icon_file)
+        if ext == ".svg":
+            startSvgTag = """<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+            <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
+            "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+            <svg version="1.1"
+            xmlns="http://www.w3.org/2000/svg"
+            xmlns:xlink="http://www.w3.org/1999/xlink"
+            width="240px" height="240px" viewBox="0 0 240 240">"""
 
-        print("  {}".format(os.path.basename(image_file)))
+            endSvgTag = """</svg>"""
+            base64String = '<image xlink:href="data:image/png;base64,{0}" width="240" height="240" x="0" y="0" />'.format(
+                base64data.decode('utf-8'))
+            data = startSvgTag + base64String + endSvgTag
+        else:
+            data = base64.b64decode(base64data.encode())
+        with open(icon_file, "wb") as fh:
+            fh.write(data)
 
-    def dump_svg_file(self, svg_file, base64data):
-        startSvgTag = """<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-        <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
-        "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-        <svg version="1.1"
-        xmlns="http://www.w3.org/2000/svg"
-        xmlns:xlink="http://www.w3.org/1999/xlink"
-        width="240px" height="240px" viewBox="0 0 240 240">"""
-
-        endSvgTag = """</svg>"""
-        base64String = '<image xlink:href="data:image/png;base64,{0}" width="240" height="240" x="0" y="0" />'.format(
-            base64data.decode('utf-8'))
-        if not os.path.exists(os.path.dirname(svg_file)):
-            try:
-                os.makedirs(os.path.dirname(svg_file))
-            except OSError as exc:  # Guard against race condition
-                if exc.errno != errno.EEXIST:
-                    raise
-
-        with open(svg_file, "w") as fh:
-            fh.write(startSvgTag + base64String + endSvgTag)
-
-        print("  {}".format(os.path.basename(svg_file)))
+        print("  {}".format(os.path.basename(icon_file)))
 
     def dump_sld_file(self):
 
