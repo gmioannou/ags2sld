@@ -1,15 +1,14 @@
 import base64
+import errno
 import json
 import os
-import urllib2
-# from urlparse import urljoin
 
 import requests
-from lxml import etree
+from django.conf import settings
+from django.template.defaultfilters import slugify
 from lxml.etree import tostring
 
 import sld
-from django.conf import settings
 
 
 class Service(object):
@@ -79,7 +78,7 @@ class Layer(object):
 
     @property
     def name(self):
-        return self.descriptor.get('name')
+        return slugify(self.descriptor.get('name')).replace("-", "-")
 
     @property
     def drawingInfo(self):
@@ -129,7 +128,7 @@ class Layer(object):
         # max_scale = str(self.descriptor.get('maxScale'))
 
         if self.drawingInfo.get('renderer').get('type') == "simple":
-            rule_label = self.descriptor.get('name')
+            rule_label = self.name
             rule = featureTypeStyle.create_rule(rule_label,
                                                 sld.PolygonSymbolizer)
             del rule.PolygonSymbolizer
@@ -180,7 +179,7 @@ class Layer(object):
         # max_scale = str(self.descriptor.get('maxScale'))
 
         if self.drawingInfo['renderer']['type'] == "simple":
-            rule_label = self.descriptor.get('name')
+            rule_label = self.name
             rule = featureTypeStyle.create_rule(rule_label, sld.LineSymbolizer)
             del rule.LineSymbolizer
 
@@ -214,7 +213,7 @@ class Layer(object):
         renderer_type = self.drawingInfo.get('renderer').get('type')
 
         if renderer_type == "simple":
-            rule_label = self.descriptor.get('name')
+            rule_label = self.name
 
             rule = featureTypeStyle.create_rule(rule_label,
                                                 sld.PointSymbolizer)
@@ -295,21 +294,33 @@ class Layer(object):
         symbol_size = str(symbol.get('width'))
         symbol_contentType = symbol.get('contentType')
         base64data = symbol.get('imageData')
-
+        # TODO:Refactor the following section
         if img_type == 'img':
             img_ext = symbol_contentType.split('/')[1]
-            img_name = rule.Title.replace(' ', '_').replace('/', '_')
-            img_file = "{}.{}".format(img_name, img_ext)
+            img_name = slugify(rule.Title).replace("-", "_")
+            # NOTE:I added icons to a directory with the layer name 
+            # the structure would be 
+            # + dump_folder/ 
+            #    + file.sld 
+            #    + layer_name/ 
+            #       + icon.png/svg 
+            img_file = os.path.join(self.name, "{}.{}".format(
+                img_name, img_ext))
             img_file_path = os.path.join(self.dump_folder, img_file)
-
             self.dump_image_file(img_file_path, base64data)
-
             onlineResource = externalGraphic.create_online_resource(img_file)
             externalGraphic.Format = "image/{}".format(img_ext)
         else:
             svg_ext = "svg"
-            svg_name = rule.Title.replace(' ', '_').replace('/', '_')
-            svg_file = "{}.{}".format(svg_name, svg_ext)
+            svg_name = slugify(rule.Title).replace("-", "_")
+            # NOTE:I added icons to a directory with the layer name 
+            # the structure would be 
+            # + dump_folder/ 
+            #    + file.sld 
+            #    + layer_name/ 
+            #       + icon.png/svg 
+            svg_file = os.path.join(self.name, "{}.{}".format(
+                svg_name, svg_ext))
             svg_file_path = os.path.join(self.dump_folder, svg_file)
 
             self.dump_svg_file(svg_file_path, base64data)
@@ -455,6 +466,12 @@ class Layer(object):
         return color_hex
 
     def dump_image_file(self, image_file, base64data):
+        if not os.path.exists(os.path.dirname(image_file)):
+            try:
+                os.makedirs(os.path.dirname(image_file))
+            except OSError as exc:  # Guard against race condition
+                if exc.errno != errno.EEXIST:
+                    raise
         with open(image_file, "wb") as fh:
             fh.write(base64.b64decode(base64data.encode()))
 
@@ -472,6 +489,12 @@ class Layer(object):
         endSvgTag = """</svg>"""
         base64String = '<image xlink:href="data:image/png;base64,{0}" width="240" height="240" x="0" y="0" />'.format(
             base64data.decode('utf-8'))
+        if not os.path.exists(os.path.dirname(svg_file)):
+            try:
+                os.makedirs(os.path.dirname(svg_file))
+            except OSError as exc:  # Guard against race condition
+                if exc.errno != errno.EEXIST:
+                    raise
 
         with open(svg_file, "w") as fh:
             fh.write(startSvgTag + base64String + endSvgTag)
@@ -482,9 +505,7 @@ class Layer(object):
 
         self.parse()
 
-        sld_name = self.descriptor.get('name').replace(' ', '_').replace(
-            '/', '_').replace(':', '_')
-
+        sld_name = slugify(self.descriptor['name']).replace("-", "_")
         sld_file = "{}.{}".format(sld_name, "sld")
         sld_file_path = os.path.join(self.dump_folder, sld_file)
 
