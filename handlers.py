@@ -34,11 +34,11 @@ class Layer(object):
         self._dump_folder = dump_folder
 
         self._renderers = {
-            'esriGeometryPoint': self._render_esriGeometryPoint,
-            'esriGeometryMultipoint': self._render_esriGeometryMultipoint,
-            'esriGeometryPolyline': self._render_esriGeometryPolyline,
-            'esriGeometryPolygon': self._render_esriGeometryPolygon
+            'simple': self._render_esriSimple,
+            'uniqueValue': self._render_uniqueValue,
+            'classBreaks': self._render_classBreaks,
         }
+
         self._type_converters = {
             'esriPMS': self._convert_esriPMS,
             'esriSFS': self._convert_esriSFS,
@@ -46,6 +46,7 @@ class Layer(object):
             'esriSMS': self._convert_esriSMS,
             'esriTS': self._convert_esriTS,
         }
+
         self._style_converters = {
             'esriSMSCircle': self._convert_esriSMSCircle,
             'esriSLSDash': self._convert_esriSLSDash,
@@ -84,8 +85,20 @@ class Layer(object):
     def drawingInfo(self):
         return self.descriptor.get('drawingInfo')
 
-    def _determine_renderer(self, geometryType):
-        return self._renderers.get(geometryType)
+    @property
+    def geometryType(self):
+        return self.descriptor.get('geometryType')
+
+    @property
+    def renderer(self):
+        return self.descriptor.get('drawingInfo').get('renderer')
+
+    @property
+    def labelingInfo(self):
+        return self.descriptor.get('drawingInfo').get('labelingInfo')
+
+    def _determine_renderer(self, renderer_type):
+        return self._renderers.get(renderer_type, self._render_default)
 
     def _determine_type_converter(self, symbol_type):
         return self._type_converters.get(symbol_type,
@@ -100,193 +113,152 @@ class Layer(object):
         userStyle = namedLayer.create_userstyle()
         featureTypeStyle = userStyle.create_featuretypestyle()
 
-        geometryType = self.descriptor.get('geometryType')
-        renderer = self._determine_renderer(geometryType)
+        renderer_type = self.renderer.get('type')
 
+        renderer = self._determine_renderer(renderer_type)
         renderer(featureTypeStyle)
 
-        if self.descriptor.get('drawingInfo').get('labelingInfo'):
-            self._parse_labelingInfo(featureTypeStyle)
+        self._parse_labelingInfo(featureTypeStyle)
 
     def _parse_labelingInfo(self, featureTypeStyle):
-        labelingInfo = self.descriptor.get('drawingInfo').get('labelingInfo')
-        for labelRule in labelingInfo:
+        if not self.labelingInfo: return
+
+        for labelRule in self.labelingInfo:
             labelPlacement = labelRule.get('labelPlacement')
             labelExpression = labelRule.get('labelExpression').replace(
                 '[', '').replace(']', '')
+
             symbol = labelRule.get('symbol')
             symbolType = symbol.get('type')
 
-            rule = featureTypeStyle.create_rule("", sld.TextSymbolizer)
-            del rule.TextSymbolizer
+            rule = featureTypeStyle.create_rule("Labels")
+            del rule.PointSymbolizer
 
             converter = self._determine_type_converter(symbolType)
             converter(rule, labelExpression, labelPlacement, symbol)
 
-    def _render_esriGeometryPolygon(self, featureTypeStyle):
-        # min_scale = str(self.descriptor.get('minScale'))
-        # max_scale = str(self.descriptor.get('maxScale'))
+    def _render_esriSimple(self, featureTypeStyle):
+        print "  Simple renderer"
+        scales = self._convert_esriScales()
 
-        if self.drawingInfo.get('renderer').get('type') == "simple":
-            rule_label = self.name
-            rule = featureTypeStyle.create_rule(rule_label,
-                                                sld.PolygonSymbolizer)
-            del rule.PolygonSymbolizer
+        rule = featureTypeStyle.create_rule(
+            self.name,
+            MinScaleDenominator=scales.get('max_scale'),
+            MaxScaleDenominator=scales.get('min_scale'))
+        del rule.PointSymbolizer
 
-            symbol = self.drawingInfo.get('renderer').get('symbol')
-            self._render_esriGeometryPolygonRule(rule, symbol)
-
-        if self.drawingInfo.get('renderer').get('type') == "uniqueValue":
-            field1 = self.drawingInfo.get('renderer').get('field1')
-            uniqueValueInfos = self.drawingInfo.get('renderer').get(
-                'uniqueValueInfos')
-
-            for uniqueValue in uniqueValueInfos:
-                label = uniqueValue.get('label')
-                value = uniqueValue.get('value')
-
-                rule = featureTypeStyle.create_rule(label,
-                                                    sld.PolygonSymbolizer)
-                del rule.PolygonSymbolizer
-
-                rule.create_filter(field1, '==', value)
-                symbol = uniqueValue.get('symbol')
-                self._render_esriGeometryPolygonRule(rule, symbol)
-
-    def _render_esriGeometryPolygonRule(self, rule, symbol):
-        # fill symbol
+        symbol = self.renderer.get('symbol')
         symbol_type = symbol.get('type')
+
         type_converter = self._determine_type_converter(symbol_type)
         type_converter(rule, symbol)
 
-        symbol_style = symbol.get('style')
-        style_converter = self._determine_style_converter(symbol_style)
-        style_converter(rule, symbol)
+    def _render_uniqueValue(self, featureTypeStyle):
+        print "  UniqueValue renderer"
 
-        # outline symbol
-        outline = symbol.get('outline')
+        field1 = self.renderer.get('field1')
+        uniqueValueInfos = self.renderer.get('uniqueValueInfos')
+        scales = self._convert_esriScales()
 
-        outline_type = outline.get('type')
-        type_converter = self._determine_type_converter(outline_type)
-        type_converter(rule, symbol)
+        for uniqueValue in uniqueValueInfos:
+            rule_label = uniqueValue.get('label')
+            rule_value = uniqueValue.get('value')
 
-        outline_style = outline.get('style')
-        style_converter = self._determine_style_converter(outline_style)
-        style_converter(rule, symbol)
+            rule = featureTypeStyle.create_rule(
+                rule_label,
+                MinScaleDenominator=scales.get('max_scale'),
+                MaxScaleDenominator=scales.get('min_scale'))
+            del rule.PointSymbolizer
 
-    def _render_esriGeometryPolyline(self, featureTypeStyle):
-        # min_scale = str(self.descriptor.get('minScale'))
-        # max_scale = str(self.descriptor.get('maxScale'))
+            rule.create_filter(field1, '==', rule_value)
 
-        if self.drawingInfo['renderer']['type'] == "simple":
-            rule_label = self.name
-            rule = featureTypeStyle.create_rule(rule_label, sld.LineSymbolizer)
-            del rule.LineSymbolizer
-
-            symbol = self.drawingInfo['renderer']['symbol']
-
+            symbol = uniqueValue.get('symbol')
             symbol_type = symbol.get('type')
+
             type_converter = self._determine_type_converter(symbol_type)
             type_converter(rule, symbol)
 
-            symbol_style = symbol.get('style')
-            style_converter = self._determine_type_converter(symbol_style)
-            style_converter(rule, symbol)
+    def _render_classBreaks(self, featureTypeStyle):
+        print "  ClassBreaks renderer"
 
-        if self.drawingInfo['renderer']['type'] == "uniqueValue":
-            field1 = self.drawingInfo['renderer']['field1']
-            uniqueValueInfos = self.drawingInfo['renderer']['uniqueValueInfos']
+        field = self.renderer.get('field')
+        minValue = str(self.renderer.get('minValue'))
+        classBreakInfos = self.renderer.get('classBreakInfos')
+        scales = self._convert_esriScales()
 
-            for uniqueValue in uniqueValueInfos:
-                label = uniqueValue['label']
-                value = uniqueValue['value']
+        for classBreakInfo in classBreakInfos:
+            rule_label = classBreakInfo.get('label')
+            classMaxValue = str(classBreakInfo.get('classMaxValue'))
 
-                rule = featureTypeStyle.create_rule(label, sld.LineSymbolizer)
-                del rule.LineSymbolizer
-
-                rule.create_filter(field1, '==', value)
-
-    def _render_esriGeometryPoint(self, featureTypeStyle):
-        # min_scale = str(self.descriptor.get('minScale'))
-        # max_scale = str(self.descriptor.get('maxScale'))
-
-        renderer_type = self.drawingInfo.get('renderer').get('type')
-
-        if renderer_type == "simple":
-            rule_label = self.name
-
-            rule = featureTypeStyle.create_rule(rule_label,
-                                                sld.PointSymbolizer)
-
+            rule = featureTypeStyle.create_rule(
+                rule_label,
+                MinScaleDenominator=scales.get('max_scale'),
+                MaxScaleDenominator=scales.get('min_scale'))
             del rule.PointSymbolizer
 
-            symbol = self.drawingInfo.get('renderer').get('symbol')
+            filter1 = sld.Filter(rule)
+            filter1.PropertyIsGreaterThanOrEqualTo = sld.PropertyCriterion(
+                filter1, 'PropertyIsGreaterThanOrEqualTo')
+            filter1.PropertyIsGreaterThanOrEqualTo.PropertyName = field
+            filter1.PropertyIsGreaterThanOrEqualTo.Literal = minValue
 
+            filter2 = sld.Filter(rule)
+            filter2.PropertyIsLessThanOrEqualTo = sld.PropertyCriterion(
+                filter2, 'PropertyIsLessThanOrEqualTo')
+            filter2.PropertyIsLessThanOrEqualTo.PropertyName = field
+            filter2.PropertyIsLessThanOrEqualTo.Literal = classMaxValue
+
+            rule.Filter = filter1 + filter2
+            minValue = classMaxValue
+
+            symbol = classBreakInfo.get('symbol')
             symbol_type = symbol.get('type')
 
             converter = self._determine_type_converter(symbol_type)
             converter(rule, symbol)
 
-        if renderer_type == "uniqueValue":
-            field1 = self.drawingInfo.get('renderer').get('field1')
-            uniqueValueInfos = self.drawingInfo.get('renderer').get(
-                'uniqueValueInfos')
+    def _render_default(self, featureTypeStyle):
+        print "  Default renderer"
+        scales = self._convert_esriScales()
 
-            for uniqueValue in uniqueValueInfos:
-                label = uniqueValue.get('label')
-                value = uniqueValue.get('value')
-                symbol = uniqueValue.get('symbol')
+        if self.geometryType == "esriGeometryPoint":
+            rule = featureTypeStyle.create_rule(
+                self.name,
+                symbolizer=sld.PointSymbolizer,
+                MinScaleDenominator=scales.get('max_scale'),
+                MaxScaleDenominator=scales.get('min_scale'))
 
-                rule = featureTypeStyle.create_rule(label, sld.PointSymbolizer)
-                del rule.PointSymbolizer
+        elif self.geometryType == "esriGeometryPolyline":
+            rule = featureTypeStyle.create_rule(
+                self.name,
+                symbolizer=sld.LineSymbolizer,
+                MinScaleDenominator=scales.get('max_scale'),
+                MaxScaleDenominator=scales.get('min_scale'))
 
-                rule.create_filter(field1, '==', value)
+        elif self.geometryType == "esriGeometryPolygon":
+            rule = featureTypeStyle.create_rule(
+                self.name,
+                symbolizer=sld.PolygonSymbolizer,
+                MinScaleDenominator=scales.get('max_scale'),
+                MaxScaleDenominator=scales.get('min_scale'))
 
-                symbol_type = symbol.get('type')
-                converter = self._determine_type_converter(symbol_type)
-                converter(rule, symbol)
+    def _convert_esriScales(self):
+        min_scale = self.descriptor.get('minScale')
+        max_scale = self.descriptor.get('maxScale')
+        
+        if min_scale == 0:
+            min_scale = None
+        else:
+            min_scale = str(min_scale)
 
-        if renderer_type == "classBreaks":
-            field = self.drawingInfo.get('renderer').get('field')
-            minValue = self.drawingInfo.get('renderer').get('minValue')
-            minValue = str(minValue)
+        if max_scale == 0:
+            max_scale = None
+        else:
+            max_scale = str(max_scale)
 
-            classBreakInfos = self.drawingInfo.get('renderer').get(
-                'classBreakInfos')
-
-            for classBreakInfo in classBreakInfos:
-                classMaxValue = str(classBreakInfo.get('classMaxValue'))
-                label = classBreakInfo.get('label')
-                symbol = classBreakInfo.get('symbol')
-
-                rule = featureTypeStyle.create_rule(label, sld.PointSymbolizer)
-                del rule.PointSymbolizer
-
-                filter1 = sld.Filter(rule)
-                filter1.PropertyIsGreaterThanOrEqualTo = sld.PropertyCriterion(
-                    filter1, 'PropertyIsGreaterThanOrEqualTo')
-                filter1.PropertyIsGreaterThanOrEqualTo.PropertyName = field
-                filter1.PropertyIsGreaterThanOrEqualTo.Literal = minValue
-
-                filter2 = sld.Filter(rule)
-                filter2.PropertyIsLessThanOrEqualTo = sld.PropertyCriterion(
-                    filter2, 'PropertyIsLessThanOrEqualTo')
-                filter2.PropertyIsLessThanOrEqualTo.PropertyName = field
-                filter2.PropertyIsLessThanOrEqualTo.Literal = classMaxValue
-
-                rule.Filter = filter1 + filter2
-                minValue = classMaxValue
-
-                symbol_type = symbol.get('type')
-                converter = self._determine_type_converter(symbol_type)
-                converter(rule, symbol)
-
-    def _render_esriGeometryMultipoint(self, rule, symbol):
-        print "_render_esriGeometryMultipoint - TODO"
+        return {'min_scale': min_scale, 'max_scale': max_scale}
 
     def _convert_esriPMS(self, rule, symbol, img_type='img'):
-        print "_convert_esriPMS"
-
         symbolizer = rule.create_symbolizer('Point')
         graphic = symbolizer.create_element("sld", 'Graphic')
         externalGraphic = graphic.create_element("sld", "ExternalGraphic")
@@ -294,7 +266,7 @@ class Layer(object):
         symbol_size = str(symbol.get('width'))
         symbol_contentType = symbol.get('contentType')
         base64data = symbol.get('imageData')
-        # TODO:Refactor the following section
+
         sld_icon_format = None
         icon_ext = None
         icon_name = slugify(rule.Title).replace("-", "_")
@@ -310,16 +282,14 @@ class Layer(object):
             icon_name, icon_ext))
         icon_file_path = os.path.join(self.dump_folder, icon_file_name)
         self.dump_icon_file(icon_file_path, base64data)
+
         onlineResource = externalGraphic.create_online_resource(icon_file_name)
         externalGraphic.Format = sld_icon_format
 
     def _convert_esriSFS(self, rule, symbol):
-        print "_convert_esriSFS"
-
         symbolizer = rule.create_symbolizer('Polygon')
 
         fill_color = symbol.get('color')
-
         if fill_color:
             fill = symbolizer.create_fill()
             fill_opacity = str(fill_color[3] / 255)
@@ -338,42 +308,39 @@ class Layer(object):
             stroke.create_cssparameter('stroke-opacity',
                                        str(stroke_color[3] / 255))
 
+        symbol_style = symbol.get('style')
+        style_converter = self._determine_style_converter(symbol_style)
+        style_converter(symbolizer, symbol)
+
     def _convert_esriSLS(self, rule, symbol):
-        print "_convert_esriSLS"
-
-        symbolizer = rule.create_symbolizer('Line')
-
-        stroke = symbolizer.create_stroke()
         if not symbol.get('outline'):
             stroke_color = symbol.get('color')
             stroke_width = str(symbol.get('width'))
+            stroke_style = symbol.get('style')
         else:
-            stroke_color = symbol.get('outline').get('color')
-            stroke_width = str(symbol.get('outline').get('width'))
+            outline = symbol.get('outline')
+            stroke_color = outline.get('color')
+            stroke_width = str(outline.get('width'))
+            stroke_style = outline.get('style')
 
-        if stroke_color:
-            stroke.create_cssparameter('stroke',
-                                       self._convert_color(stroke_color))
-            stroke.create_cssparameter('stroke-width', stroke_width)
-            stroke.create_cssparameter('stroke-linejoin', 'bevel')
+        symbolizer = rule.create_symbolizer('Line')
+        stroke = symbolizer.create_stroke()
 
-    def _convert_esriSLSDash(self, rule, symbol):
-        print "_convert_esriSLSDash"
-        rule.LineSymbolizer.Stroke.create_cssparameter('stroke-linecap',
-                                                       'square')
-        rule.LineSymbolizer.Stroke.create_cssparameter('stroke-dasharray',
-                                                       '4 2')
+        stroke.create_cssparameter('stroke', self._convert_color(stroke_color))
+        stroke.create_cssparameter('stroke-width', stroke_width)
+        stroke.create_cssparameter('stroke-linejoin', 'bevel')
+
+        style_converter = self._determine_style_converter(stroke_style)
+        style_converter(symbolizer, symbol)
 
     def _convert_esriSMS(self, rule, symbol):
-        print "_convert_esriSMS"
         symbolizer = rule.create_symbolizer('Point')
 
         symbol_style = symbol.get('style')
-        style_converter = self._determine_type_converter(symbol_style)
-        style_converter(rule, symbolizer, symbol)
+        style_converter = self._determine_style_converter(symbol_style)
+        style_converter(symbolizer, symbol)
 
     def _convert_esriTS(self, rule, labelExpression, labelPlacement, symbol):
-        print "_convert_esriTS"
         symbolizer = rule.create_symbolizer('Text')
 
         label = symbolizer.create_label()
@@ -411,11 +378,31 @@ class Layer(object):
             halo_fill.create_cssparameter('fill',
                                           self._convert_color(halo_fill_color))
 
-        # labelPlacement = symbolizer.create_label()
+        verticalAlignment = symbol.get('verticalAlignment')
+        horizontalAlignment = symbol.get('horizontalAlignment')
 
-    # esriStyles
-    def _convert_esriSMSCircle(self, rule, symbolizer, symbol):
-        print "_convert_esriSMSCircle"
+        label_placement = symbolizer.create_label_placement()
+        point_placement = label_placement.create_point_placement()
+        anchor_point = point_placement.create_anchor_point()
+
+        if horizontalAlignment == "left":
+            anchor_point.AnchorPointX = "0.0"
+        elif horizontalAlignment == "center":
+            anchor_point.AnchorPointX = "0.5"
+        else:
+            anchor_point.AnchorPointX = "1.0"
+
+        if verticalAlignment == "bottom" or verticalAlignment == "baseline":
+            anchor_point.AnchorPointY = "0.0"
+        elif verticalAlignment == "center":
+            anchor_point.AnchorPointY = "0.5"
+        else:
+            anchor_point.AnchorPointY = "1.0"
+
+    def _convert_esriTypeDefault(self, rule, symbol):
+        pass
+
+    def _convert_esriSMSCircle(self, symbolizer, symbol):
         graphic = symbolizer.create_element("sld", 'Graphic')
         graphic.Size = str(symbol.get('size'))
 
@@ -426,23 +413,35 @@ class Layer(object):
         fill_color = symbol.get('color')
         fill_opacity = str(fill_color[3] / 255)
 
-        fill.create_cssparameter('fill', self._convert_color(*fill_color))
+        fill.create_cssparameter('fill', self._convert_color(fill_color))
         fill.create_cssparameter('fill-opacity', fill_opacity)
 
-    def _convert_esriSLSDashDotDot(self, rule, symbol):
-        print "_convert_esriSLSDashDotDot - TODO"
+    def _convert_esriSLSDash(self, symbolizer, symbol):
+        symbolizer.Stroke.create_cssparameter('stroke-linecap', 'square')
+        symbolizer.Stroke.create_cssparameter('stroke-dasharray', '4 2')
 
-    def _convert_esriSFSSolid(self, rule, symbol):
-        print "_convert_esriSFSSolid - TODO"
+    def _convert_esriSLSDashDotDot(self, symbolizer, symbol):
+        pass
 
-    def _convert_esriSLSSolid(self, rule, symbol):
-        print "_convert_esriSLSSolid - TODO"
+    def _convert_esriSFSSolid(self, symbolzer, symbol):
+        pass
 
-    def _convert_esriTypeDefault(self, rule, symbol):
-        print "_convert_esriTypeDefault"
+    def _convert_esriSLSSolid(self, symbolizer, symbol):
+        pass
 
-    def _convert_esriStyleDefault(self, rule, symbol):
-        print "_convert_esriStyleDefault"
+    def _convert_esriStyleDefault(self, symbolizer, symbol):
+        graphic = symbolizer.create_element("sld", 'Graphic')
+        graphic.Size = str(symbol.get('size'))
+
+        mark = graphic.create_element("sld", "Mark")
+        mark.WellKnownName = "dot"
+
+        fill = mark.create_fill()
+        fill_color = symbol.get('color')
+        fill_opacity = str(fill_color[3] / 255)
+
+        fill.create_cssparameter('fill', self._convert_color(fill_color))
+        fill.create_cssparameter('fill-opacity', fill_opacity)
 
     def _convert_color(self, color):
         r, g, b, a = color
@@ -497,7 +496,6 @@ class Layer(object):
         # TODO: use logger instead of print function
         print("  {}".format(os.path.basename(sld_file_path)))
 
-    # Get sld style
     def parse(self):
         if self.descriptor.get('type') == "Feature Layer":
             self._parse_drawingInfo()
