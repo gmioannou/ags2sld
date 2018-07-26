@@ -5,10 +5,12 @@ import os
 
 import requests
 from django.conf import settings
-from django.template.defaultfilters import slugify
 from lxml.etree import tostring
+from slugify import Slugify
 
 import sld
+
+SLUGIFIER = Slugify(separator='_')
 
 
 class Service(object):
@@ -78,7 +80,7 @@ class Layer(object):
 
     @property
     def name(self):
-        return slugify(self.descriptor.get('name')).replace("-", "-")
+        return SLUGIFIER(self.descriptor.get('name')).replace("-", "-")
 
     @property
     def drawingInfo(self):
@@ -112,8 +114,9 @@ class Layer(object):
         labelingInfo = self.descriptor.get('drawingInfo').get('labelingInfo')
         for labelRule in labelingInfo:
             labelPlacement = labelRule.get('labelPlacement')
-            labelExpression = labelRule.get('labelExpression').replace(
-                '[', '').replace(']', '')
+            labelExpression = SLUGIFIER(
+                labelRule.get('labelExpression').replace('[', '').replace(
+                    ']', ''))
             symbol = labelRule.get('symbol')
             symbolType = symbol.get('type')
 
@@ -297,7 +300,7 @@ class Layer(object):
         # TODO:Refactor the following section
         sld_icon_format = None
         icon_ext = None
-        icon_name = slugify(rule.Title).replace("-", "_")
+        icon_name = SLUGIFIER(rule.Title).replace("-", "_")
         if img_type == 'img':
             icon_ext = symbol_contentType.split('/')[1]
             sld_icon_format = "image/{}".format(icon_ext)
@@ -481,7 +484,7 @@ class Layer(object):
 
         self.parse()
 
-        sld_name = slugify(self.descriptor['name']).replace("-", "_")
+        sld_name = self.name
         sld_file = "{}.{}".format(sld_name, "sld")
         sld_file_path = os.path.join(self.dump_folder, sld_file)
 
