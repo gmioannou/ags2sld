@@ -6,14 +6,15 @@ import os
 import requests
 from django.conf import settings
 from django.template.defaultfilters import slugify
-from lxml.etree import tostring
 
+import lxml.etree
 import sld
+from arcgis import ArcGIS
 
 
-class Service(object):
+class Service(ArcGIS):
     def __init__(self, url):
-        self.url = url
+        ArcGIS.__init__(self, url)
 
     @property
     def descriptor(self):
@@ -54,9 +55,6 @@ class Layer(object):
             'esriSLSSolid': self._convert_esriSLSSolid,
         }
 
-    def urljoin(self, *args):
-        return "/".join(map(lambda x: str(x).rstrip('/'), args))
-
     @property
     def _url(self):
         return self.urljoin(self.service_url, self.layer_id)
@@ -96,6 +94,13 @@ class Layer(object):
     @property
     def labelingInfo(self):
         return self.descriptor.get('drawingInfo').get('labelingInfo')
+
+    @property
+    def spatialReference(self):
+        return self.descriptor.get('extent').get('spatialReference').get('wkid')
+
+    def urljoin(self, *args):
+        return "/".join(map(lambda x: str(x).rstrip('/'), args))
 
     def _determine_renderer(self, renderer_type):
         return self._renderers.get(renderer_type, self._render_default)
@@ -138,7 +143,6 @@ class Layer(object):
             converter(rule, labelExpression, labelPlacement, symbol)
 
     def _render_esriSimple(self, featureTypeStyle):
-        print "  Simple renderer"
         scales = self._convert_esriScales()
 
         rule = featureTypeStyle.create_rule(
@@ -154,8 +158,6 @@ class Layer(object):
         type_converter(rule, symbol)
 
     def _render_uniqueValue(self, featureTypeStyle):
-        print "  UniqueValue renderer"
-
         field1 = self.renderer.get('field1')
         uniqueValueInfos = self.renderer.get('uniqueValueInfos')
         scales = self._convert_esriScales()
@@ -179,8 +181,6 @@ class Layer(object):
             type_converter(rule, symbol)
 
     def _render_classBreaks(self, featureTypeStyle):
-        print "  ClassBreaks renderer"
-
         field = self.renderer.get('field')
         minValue = str(self.renderer.get('minValue'))
         classBreakInfos = self.renderer.get('classBreakInfos')
@@ -218,7 +218,6 @@ class Layer(object):
             converter(rule, symbol)
 
     def _render_default(self, featureTypeStyle):
-        print "  Default renderer"
         scales = self._convert_esriScales()
 
         if self.geometryType == "esriGeometryPoint":
@@ -245,7 +244,7 @@ class Layer(object):
     def _convert_esriScales(self):
         min_scale = self.descriptor.get('minScale')
         max_scale = self.descriptor.get('maxScale')
-        
+
         if min_scale == 0:
             min_scale = None
         else:
@@ -488,7 +487,7 @@ class Layer(object):
 
         with open(sld_file_path, 'w') as the_file:
             the_file.write(
-                tostring(
+                lxml.etree.tostring(
                     self.sld_doc._node,
                     pretty_print=True,
                     encoding="UTF-8",
