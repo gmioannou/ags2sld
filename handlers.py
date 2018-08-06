@@ -3,14 +3,13 @@ import errno
 import json
 import os
 
+import lxml.etree
 import requests
+from arcgis import ArcGIS
 from django.conf import settings
-from lxml.etree import tostring
 from slugify import Slugify
 
-import lxml.etree
 import sld
-from arcgis import ArcGIS
 
 SLUGIFIER = Slugify(separator='_')
 
@@ -100,7 +99,8 @@ class Layer(object):
 
     @property
     def spatialReference(self):
-        return self.descriptor.get('extent').get('spatialReference').get('wkid')
+        return self.descriptor.get('extent').get('spatialReference').get(
+            'wkid')
 
     def urljoin(self, *args):
         return "/".join(map(lambda x: str(x).rstrip('/'), args))
@@ -285,7 +285,7 @@ class Layer(object):
         icon_file_path = os.path.join(self.dump_folder, icon_file_name)
         self.dump_icon_file(icon_file_path, base64data)
 
-        onlineResource = externalGraphic.create_online_resource(icon_file_name)
+        externalGraphic.create_online_resource(icon_file_name)
         externalGraphic.Format = sld_icon_format
 
     def _convert_esriSFS(self, rule, symbol):
